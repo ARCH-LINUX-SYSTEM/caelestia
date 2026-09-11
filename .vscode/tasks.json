@@ -1,0 +1,125 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Codex Worker: Launcher",
+            "type": "process",
+            "command": "${workspaceFolder}/.codex-workers/run-worker.sh",
+            "args": [
+                "launcher"
+            ],
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "runOptions": {
+                "instanceLimit": 1
+            }
+        },
+        {
+            "label": "Codex Worker: System Tools",
+            "type": "process",
+            "command": "${workspaceFolder}/.codex-workers/run-worker.sh",
+            "args": [
+                "system-tools"
+            ],
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "runOptions": {
+                "instanceLimit": 1
+            }
+        },
+        {
+            "label": "Codex Worker: Control Center",
+            "type": "process",
+            "command": "${workspaceFolder}/.codex-workers/run-worker.sh",
+            "args": [
+                "control-center"
+            ],
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "runOptions": {
+                "instanceLimit": 1
+            }
+        },
+        {
+            "label": "Codex Worker: Desktop Integration",
+            "type": "process",
+            "command": "${workspaceFolder}/.codex-workers/run-worker.sh",
+            "args": [
+                "desktop-integration"
+            ],
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "runOptions": {
+                "instanceLimit": 1
+            }
+        },
+        {
+            "label": "Codex Workers: Start All",
+            "dependsOn": [
+                "Codex Worker: Launcher",
+                "Codex Worker: System Tools",
+                "Codex Worker: Control Center",
+                "Codex Worker: Desktop Integration"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        },
+        {
+            "label": "Codex Workers: Check Status",
+            "type": "process",
+            "command": "${workspaceFolder}/.codex-workers/check-workers.sh",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "Codex Workers: List Worktrees",
+            "type": "shell",
+            "command": "git worktree list",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true
+            }
+        }
+    ]
+}

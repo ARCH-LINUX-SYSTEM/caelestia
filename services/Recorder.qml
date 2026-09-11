@@ -1,0 +1,89 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Caelestia.Config
+
+Singleton {
+    id: root
+
+    readonly property alias running: props.running
+    readonly property alias paused: props.paused
+    readonly property alias elapsed: props.elapsed
+    property bool needsStart
+    property list<string> startArgs
+    property bool needsStop
+    property bool needsPause
+
+    function cliCommand(args: list<string>): list<string> {
+        const outputDir = GlobalConfig.paths.screenRecordDir.trim();
+        const command = ["caelestia", "record", ...args];
+        return outputDir ? ["env", `CAELESTIA_RECORDINGS_DIR=${outputDir}`, ...command] : command;
+    }
+
+    function start(extraArgs = []): void {
+        needsStart = true;
+        startArgs = extraArgs;
+        checkProc.running = true;
+    }
+
+    function stop(): void {
+        needsStop = true;
+        checkProc.running = true;
+    }
+
+    function togglePause(): void {
+        needsPause = true;
+        checkProc.running = true;
+    }
+
+    PersistentProperties {
+        id: props
+
+        property bool running: false
+        property bool paused: false
+        property real elapsed: 0 // Might get too large for int
+
+        reloadableId: "recorder"
+    }
+
+    Process {
+        id: checkProc
+
+        running: true
+        command: ["pidof", "gpu-screen-recorder"]
+        onExited: code => { // qmllint disable signal-handler-parameters
+            props.running = code === 0;
+
+            if (code === 0) {
+                if (root.needsStop) {
+                    Quickshell.execDetached(root.cliCommand([]));
+                    props.running = false;
+                    props.paused = false;
+                } else if (root.needsPause) {
+                    Quickshell.execDetached(root.cliCommand(["-p"]));
+                    props.paused = !props.paused;
+                }
+            } else if (root.needsStart) {
+                Quickshell.execDetached(root.cliCommand(root.startArgs));
+                props.running = true;
+                props.paused = false;
+                props.elapsed = 0;
+            }
+
+            root.needsStart = false;
+            root.needsStop = false;
+            root.needsPause = false;
+        }
+    }
+
+    Connections {
+        // enabled: props.running && !props.paused
+        function onSecondsChanged(): void {
+            props.elapsed++;
+        }
+
+        target: Time // qmllint disable incompatible-type
+    }
+}
