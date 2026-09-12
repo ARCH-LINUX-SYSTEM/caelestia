@@ -1,0 +1,197 @@
+pragma Singleton
+
+import QtQml
+import Quickshell
+import Quickshell.Io
+import Quickshell.Services.Mpris
+import Caelestia
+import Caelestia.Config
+import qs.components.misc
+
+Singleton {
+    id: root
+
+    readonly property list<MprisPlayer> rawList: Mpris.players.values
+    readonly property bool hasActivePlasmaIntegration: rawList.some(player => (player.dbusName ?? "").startsWith("org.mpris.MediaPlayer2.plasma-browser-integration"))
+    readonly property list<MprisPlayer> list: GlobalConfig.services.filterDuplicatePlayers ? rawList.filter(player => isRealPlayer(player)) : rawList
+    readonly property string preferredIdentity: GlobalConfig.bar.media.preferredPlayer.trim() || GlobalConfig.services.defaultPlayer
+    readonly property MprisPlayer active: props.manualActive ?? list.find(p => getIdentity(p).toLowerCase() === preferredIdentity.toLowerCase()) ?? list[0] ?? null
+    property alias manualActive: props.manualActive
+
+    // Dedup key for progressive metadata (e.g. mpv-mpris/yt-dlp player fills title then artist later).
+    property string lastNowPlayingKey: ""
+
+    function isRealPlayer(player: MprisPlayer): bool {
+        const dbusName = player?.dbusName ?? "";
+        if (hasActivePlasmaIntegration && (dbusName.startsWith("org.mpris.MediaPlayer2.firefox") || dbusName.startsWith("org.mpris.MediaPlayer2.chromium")))
+            return false;
+        if (dbusName.startsWith("org.mpris.MediaPlayer2.playerctld"))
+            return false;
+        if (dbusName.endsWith(".mpd") && !dbusName.endsWith("MediaPlayer2.mpd"))
+            return false;
+        return true;
+    }
+
+    function getIdentity(player: MprisPlayer): string {
+        if (!player)
+            return "";
+        const alias = GlobalConfig.services.playerAliases.find(a => a.from === player.identity);
+        return alias?.to ?? player.identity;
+    }
+
+    function getArtUrl(player: MprisPlayer): string {
+        if (!player)
+            return "";
+        if (player.trackArtUrl)
+            return player.trackArtUrl;
+
+        const url = player.metadata["xesam:url"] ?? "";
+        if (url.startsWith("https://www.youtube.com/watch")) {
+            // Fallback for youtube
+            const id = url.match(/[?&]v=([\w-]{11})/)?.[1];
+            return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
+        }
+        return "";
+    }
+
+    // Quickshell only emits postTrackChanged when trackid/url/title change, so late
+    // artist updates (common with mpv-mpris + yt-dlp player) never retrigger it. Watch
+    // title/artist too and toast once both are usable.
+    function maybeToastNowPlaying(): void {
+        if (!GlobalConfig.utilities.toasts.nowPlaying)
+            return;
+
+        const player = root.active;
+        if (!player)
+            return;
+
+        const title = player.trackTitle ?? "";
+        const artist = player.trackArtist ?? "";
+        if (!title || !artist)
+            return;
+
+        const key = `${getIdentity(player)}\0${player.uniqueId}\0${title}\0${artist}`;
+        if (key === lastNowPlayingKey)
+            return;
+
+        lastNowPlayingKey = key;
+        Toaster.toast(qsTr("Đang phát"), qsTr("%1 - %2").arg(artist).arg(title), "music_note");
+    }
+
+    onActiveChanged: lastNowPlayingKey = ""
+
+    Connections {
+        function onPostTrackChanged(): void {
+            root.maybeToastNowPlaying();
+        }
+
+        function onTrackTitleChanged(): void {
+            root.maybeToastNowPlaying();
+        }
+
+        function onTrackArtistChanged(): void {
+            root.maybeToastNowPlaying();
+        }
+
+        target: root.active
+    }
+
+    PersistentProperties {
+        id: props
+
+        property MprisPlayer manualActive
+
+        reloadableId: "players"
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "mediaToggle"
+        description: qsTr("Phát hoặc tạm dừng")
+        onPressed: {
+            const active = root.active;
+            if (active && active.canTogglePlaying)
+                active.togglePlaying();
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "mediaPrev"
+        description: qsTr("Bài trước")
+        onPressed: {
+            const active = root.active;
+            if (active && active.canGoPrevious)
+                active.previous();
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "mediaNext"
+        description: qsTr("Bài tiếp theo")
+        onPressed: {
+            const active = root.active;
+            if (active && active.canGoNext)
+                active.next();
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "mediaStop"
+        description: qsTr("Dừng phát")
+        onPressed: root.active?.stop()
+    }
+
+    IpcHandler {
+        function getActive(prop: string): string {
+            const active = root.active;
+            return active ? active[prop] ?? "Invalid property" : "No active player";
+        }
+
+        function list(): string {
+            return root.list.map(p => root.getIdentity(p)).join("\n");
+        }
+
+        function play(): void {
+            const active = root.active;
+            if (active?.canPlay)
+                active.play();
+        }
+
+        function pause(): void {
+            const active = root.active;
+            if (active?.canPause)
+                active.pause();
+        }
+
+        function playPause(): void {
+            const active = root.active;
+            if (active?.canTogglePlaying)
+                active.togglePlaying();
+        }
+
+        function previous(): void {
+            const active = root.active;
+            if (active?.canGoPrevious)
+                active.previous();
+        }
+
+        function next(): void {
+            const active = root.active;
+            if (active?.canGoNext)
+                active.next();
+        }
+
+        function stop(): void {
+            root.active?.stop();
+        }
+
+        target: "mpris"
+    }
+}
