@@ -111,6 +111,53 @@ Item {
             onAccepted: root.selectWallpaper(String(selectedFile))
         }
 
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Tokens.spacing.medium * 1.06
+
+            IconTextButton {
+                font: Tokens.font.body.small
+                horizontalPadding: Tokens.padding.medium
+                icon: "image"
+                isRound: true
+                text: qsTr("Tĩnh")
+                type: Wallpapers.wallpaperMode === "static" ? IconTextButton.Filled : IconTextButton.Tonal
+                verticalPadding: Tokens.padding.extraSmall
+
+                onClicked: Wallpapers.setWallpaperMode("static")
+            }
+            IconTextButton {
+                font: Tokens.font.body.small
+                horizontalPadding: Tokens.padding.medium
+                icon: "movie"
+                isRound: true
+                text: qsTr("Động")
+                type: Wallpapers.wallpaperMode === "animated" ? IconTextButton.Filled : IconTextButton.Tonal
+                verticalPadding: Tokens.padding.extraSmall
+
+                onClicked: Wallpapers.setWallpaperMode("animated")
+            }
+            IconTextButton {
+                font: Tokens.font.body.small
+                horizontalPadding: Tokens.padding.medium
+                icon: "refresh"
+                isRound: true
+                scale: 0.9
+                text: qsTr("Làm mới")
+                type: IconTextButton.Tonal
+                verticalPadding: Tokens.padding.extraSmall
+                visible: Wallpapers.wallpaperMode === "animated"
+
+                onClicked: Wallpapers.refreshAnimatedThumbs()
+            }
+            Text {
+                color: Colours.palette.m3secondary
+                font: Tokens.font.body.small
+                text: qsTr("Đang xử lý…")
+                visible: Wallpapers._refreshing && Wallpapers.wallpaperMode === "animated"
+            }
+        }
+
         ListView {
             id: wallList
 
@@ -119,13 +166,13 @@ Item {
 
             Layout.fillWidth: true
             Layout.preferredHeight: itemHeight
-            visible: Wallpapers.allWallpapers.length > 0
+            visible: Wallpapers.list.length > 0
 
             orientation: ListView.Horizontal
             clip: true
             spacing: Tokens.spacing.large
             boundsBehavior: Flickable.StopAtBounds
-            model: Wallpapers.allWallpapers
+            model: Wallpapers.list
 
             delegate: WallItem {
                 required property FileSystemEntry modelData
@@ -154,7 +201,7 @@ Item {
             Layout.preferredHeight: wallList.itemHeight
 
             asynchronous: true
-            active: Wallpapers.allWallpapers.length === 0
+            active: Wallpapers.list.length === 0
             visible: active
 
             sourceComponent: StyledRect {
@@ -176,7 +223,7 @@ Item {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Không tìm thấy hình nền trong %1").arg(Paths.shortenHome(Paths.wallsdir))
+                        text: Wallpapers.wallpaperMode === "animated" ? qsTr("Không tìm thấy hình nền động trong %1").arg(Paths.shortenHome(Paths.wallsdir) + "/Animated") : qsTr("Không tìm thấy hình nền trong %1").arg(Paths.shortenHome(Paths.wallsdir))
                         color: Colours.palette.m3outline
                         font: Tokens.font.title.small
                     }

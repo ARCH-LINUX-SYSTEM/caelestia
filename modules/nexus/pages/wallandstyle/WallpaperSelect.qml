@@ -23,10 +23,14 @@ PageBase {
     readonly property var filteredWallpapers: {
         const query = GlobalConfig.nexus.showWallpaperSearch ? wallpaperSearch.trim().toLocaleLowerCase() : "";
         if (!query)
-            return Wallpapers.allWallpapers;
-        return Wallpapers.allWallpapers.filter(wallpaper => {
+            return Wallpapers.list;
+        return Wallpapers.list.filter(wallpaper => {
             return [wallpaper.name, wallpaper.relativePath, wallpaper.parentDir].some(value => String(value ?? "").toLocaleLowerCase().includes(query));
         });
+    }
+
+    function currentBaseDir(): string {
+        return Wallpapers.wallpaperMode === "animated" ? Paths.wallsdir + "/Animated" : Paths.wallsdir;
     }
 
     function closeAfterSelection(): void {
@@ -157,6 +161,54 @@ PageBase {
                 onAccepted: root.selectWallpaper(String(selectedFile))
             }
 
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: Tokens.spacing.medium
+                spacing: Tokens.spacing.medium * 1.06
+
+                IconTextButton {
+                    font: Tokens.font.body.small
+                    horizontalPadding: Tokens.padding.medium
+                    icon: "image"
+                    isRound: true
+                    text: qsTr("Tĩnh")
+                    type: Wallpapers.wallpaperMode === "static" ? IconTextButton.Filled : IconTextButton.Tonal
+                    verticalPadding: Tokens.padding.extraSmall
+
+                    onClicked: Wallpapers.setWallpaperMode("static")
+                }
+                IconTextButton {
+                    font: Tokens.font.body.small
+                    horizontalPadding: Tokens.padding.medium
+                    icon: "movie"
+                    isRound: true
+                    text: qsTr("Động")
+                    type: Wallpapers.wallpaperMode === "animated" ? IconTextButton.Filled : IconTextButton.Tonal
+                    verticalPadding: Tokens.padding.extraSmall
+
+                    onClicked: Wallpapers.setWallpaperMode("animated")
+                }
+                IconTextButton {
+                    font: Tokens.font.body.small
+                    horizontalPadding: Tokens.padding.medium
+                    icon: "refresh"
+                    isRound: true
+                    scale: 0.9
+                    text: qsTr("Làm mới")
+                    type: IconTextButton.Tonal
+                    verticalPadding: Tokens.padding.extraSmall
+                    visible: Wallpapers.wallpaperMode === "animated"
+
+                    onClicked: Wallpapers.refreshAnimatedThumbs()
+                }
+                StyledText {
+                    color: Colours.palette.m3secondary
+                    font: Tokens.font.body.small
+                    text: qsTr("Đang xử lý…")
+                    visible: Wallpapers._refreshing && Wallpapers.wallpaperMode === "animated"
+                }
+            }
+
             StyledTextField {
                 Layout.fillWidth: true
                 visible: GlobalConfig.nexus.showWallpaperSearch
@@ -166,6 +218,7 @@ PageBase {
             }
 
             WallItem {
+                visible: Wallpapers.wallpaperMode === "static"
                 imgHeight: Math.round(width * 0.3)
                 radius: Tokens.rounding.extraLarge
                 source: Quickshell.shellPath("assets/wallpaper.webp")
@@ -176,7 +229,7 @@ PageBase {
 
             StyledText {
                 Layout.topMargin: Tokens.spacing.large
-                text: qsTr("Hình nền cục bộ")
+                text: Wallpapers.wallpaperMode === "animated" ? qsTr("Hình nền động cục bộ") : qsTr("Hình nền cục bộ")
                 font: Tokens.font.title.small
             }
 
@@ -193,7 +246,7 @@ PageBase {
 
                     model: {
                         const walls = root.filteredWallpapers;
-                        const baseDir = Paths.wallsdir;
+                        const baseDir = root.currentBaseDir();
                         const categories = {};
                         const list = [];
                         for (const w of walls) {
@@ -224,14 +277,14 @@ PageBase {
                             if (!modelData)
                                 return "";
 
-                            if (modelData.parentDir !== Paths.wallsdir) {
+                            if (modelData.parentDir !== root.currentBaseDir()) {
                                 const category = Wallpapers.getCategoryFor(modelData);
                                 return category.slice(0, 1).toUpperCase() + category.slice(1);
                             }
                             return modelData.name;
                         }
                         onClicked: {
-                            if (modelData.parentDir !== Paths.wallsdir) {
+                            if (modelData.parentDir !== root.currentBaseDir()) {
                                 root.nState.selectedWallpaperCategory = Wallpapers.getCategoryFor(modelData);
                                 root.nState.openSubPage(2); // Category page
                             } else {
@@ -269,7 +322,7 @@ PageBase {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.wallpaperSearch ? qsTr("Không có hình nền khớp tìm kiếm") : qsTr("Không tìm thấy hình nền cục bộ")
+                            text: root.wallpaperSearch ? qsTr("Không có hình nền khớp tìm kiếm") : (Wallpapers.wallpaperMode === "animated" ? qsTr("Không tìm thấy hình nền động (thêm tệp mp4/webm/mkv vào %1)").arg(Paths.shortenHome(Paths.wallsdir) + "/Animated") : qsTr("Không tìm thấy hình nền cục bộ"))
                             color: Colours.palette.m3outline
                             font: Tokens.font.title.small
                         }
