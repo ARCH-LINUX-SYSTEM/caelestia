@@ -10,7 +10,7 @@ PageBase {
 
     function lockTimeout(): int {
         const entry = GlobalConfig.general.idle.timeouts.find(e => e && e.idleAction === "lock");
-        return entry ? entry.timeout : 180;
+        return entry ? entry.timeout : 7200;
     }
 
     function setLockTimeout(seconds: int): void {
@@ -91,7 +91,7 @@ PageBase {
             subtext: qsTr("Số giây không thao tác trước khi màn hình tự khóa")
             value: root.lockTimeout()
             from: 10
-            to: 3600
+            to: 14400
             stepSize: 10
             onMoved: value => root.setLockTimeout(Math.round(value))
         }

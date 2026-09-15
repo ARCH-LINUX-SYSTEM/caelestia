@@ -45,16 +45,16 @@ class GeneralIdle : public ConfigObject {
     CONFIG_GLOBAL_PROPERTY(QVariantList, timeouts,
         {
             vmap({
-                { u"timeout"_s, 180 },
+                { u"timeout"_s, 7200 },
                 { u"idleAction"_s, u"lock"_s },
             }),
             vmap({
-                { u"timeout"_s, 300 },
+                { u"timeout"_s, 7500 },
                 { u"idleAction"_s, u"dpms off"_s },
                 { u"returnAction"_s, u"dpms on"_s },
             }),
             vmap({
-                { u"timeout"_s, 600 },
+                { u"timeout"_s, 9000 },
                 { u"idleAction"_s, QStringList{ u"suspendThenHibernate"_s } },
             }),
         })
