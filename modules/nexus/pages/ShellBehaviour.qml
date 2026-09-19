@@ -10,7 +10,7 @@ PageBase {
 
     function lockTimeout(): int {
         const entry = GlobalConfig.general.idle.timeouts.find(e => e && e.idleAction === "lock");
-        return entry ? entry.timeout : 7200;
+        return entry ? entry.timeout : 3600;
     }
 
     function setLockTimeout(seconds: int): void {

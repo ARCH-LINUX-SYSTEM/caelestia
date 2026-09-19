@@ -471,7 +471,7 @@ remove_stale_owned_paths() {
     local previous_manifest="$1"
     local new_manifest="$2"
     local stale_manifest="$3"
-    comm -23 "$previous_manifest" "$new_manifest" > "$stale_manifest"
+    LC_ALL=C comm -23 "$previous_manifest" "$new_manifest" > "$stale_manifest"
 
     local path
     while IFS= read -r path || [[ -n "$path" ]]; do

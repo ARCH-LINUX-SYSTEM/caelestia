@@ -45,7 +45,7 @@ class GeneralIdle : public ConfigObject {
     CONFIG_GLOBAL_PROPERTY(QVariantList, timeouts,
         {
             vmap({
-                { u"timeout"_s, 7200 },
+                { u"timeout"_s, 3600 },
                 { u"idleAction"_s, u"lock"_s },
             }),
             vmap({

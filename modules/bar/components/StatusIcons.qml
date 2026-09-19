@@ -240,6 +240,17 @@ StyledRect {
             active: Config.bar.status.showBattery
 
             sourceComponent: ColumnLayout {
+                id: batteryLayout
+
+                readonly property bool charging: [UPowerDeviceState.Charging, UPowerDeviceState.FullyCharged, UPowerDeviceState.PendingCharge].includes(UPower.displayDevice.state)
+                readonly property color batteryColour: {
+                    if (batteryLayout.charging)
+                        return "#4CAF50";
+                    if (!UPower.onBattery || UPower.displayDevice.percentage > 0.2)
+                        return root.colour;
+                    return Colours.palette.m3error;
+                }
+
                 spacing: 0
 
                 MaterialIcon {
@@ -254,9 +265,9 @@ StyledRect {
                                 return "rocket_launch";
                             return "balance";
                         }
-                        return Icons.getBatteryIcon(UPower.displayDevice.percentage, [UPowerDeviceState.Charging, UPowerDeviceState.FullyCharged, UPowerDeviceState.PendingCharge].includes(UPower.displayDevice.state));
+                        return Icons.getBatteryIcon(UPower.displayDevice.percentage, batteryLayout.charging);
                     }
-                    color: !UPower.onBattery || UPower.displayDevice.percentage > 0.2 ? root.colour : Colours.palette.m3error
+                    color: batteryLayout.batteryColour
                     fill: 1
                 }
 
@@ -267,7 +278,7 @@ StyledRect {
                     animate: true
                     text: `${Math.round(UPower.displayDevice.percentage * 100)}%`
                     font: Tokens.font.label.small
-                    color: !UPower.onBattery || UPower.displayDevice.percentage > 0.2 ? root.colour : Colours.palette.m3error
+                    color: batteryLayout.batteryColour
                 }
             }
         }
