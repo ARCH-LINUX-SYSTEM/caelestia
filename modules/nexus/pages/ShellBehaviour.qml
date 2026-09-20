@@ -8,6 +8,16 @@ PageBase {
 
     title: qsTr("Hành vi shell")
 
+    function lockTimeout(): int {
+        const entry = GlobalConfig.general.idle.timeouts.find(e => e && e.idleAction === "lock");
+        return entry ? entry.timeout : 3600;
+    }
+
+    function setLockTimeout(seconds: int): void {
+        const timeouts = GlobalConfig.general.idle.timeouts.map(e => (e && e.idleAction === "lock") ? Object.assign({}, e, { timeout: seconds }) : e);
+        GlobalConfig.general.idle.timeouts = timeouts;
+    }
+
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -72,6 +82,18 @@ PageBase {
             text: qsTr("Bật màn hình khóa")
             checked: Config.lock.enabled
             onToggled: GlobalConfig.lock.enabled = checked
+        }
+
+        StepperRow {
+            enabled: Config.lock.enabled
+            opacity: enabled ? 1 : 0.55
+            label: qsTr("Thời gian tự động khóa")
+            subtext: qsTr("Số giây không thao tác trước khi màn hình tự khóa")
+            value: root.lockTimeout()
+            from: 10
+            to: 14400
+            stepSize: 10
+            onMoved: value => root.setLockTimeout(Math.round(value))
         }
 
         ToggleRow {

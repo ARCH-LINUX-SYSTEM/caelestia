@@ -154,6 +154,9 @@ QtObject {
             Component {
                 BarExtras {}
             }
+            Component {
+                DockPanel {}
+            }
         }
     }
 

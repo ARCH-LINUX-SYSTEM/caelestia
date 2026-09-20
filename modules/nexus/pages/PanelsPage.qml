@@ -36,11 +36,18 @@ PageBase {
         }
 
         NavRow {
-            last: true
             icon: "dock_to_right"
             label: qsTr("Thanh bên")
             status: Config.sidebar.enabled ? qsTr("Đã bật") : qsTr("Đã tắt")
             onClicked: root.nState.openSubPage(4)
+        }
+
+        NavRow {
+            last: true
+            icon: "dock"
+            label: qsTr("Dock")
+            status: GlobalConfig.dock.enabled ? qsTr("Đã bật") : qsTr("Đã tắt")
+            onClicked: root.nState.openSubPage(13)
         }
     }
 }

@@ -64,9 +64,9 @@ PageBase {
 
         ToggleRow {
             last: true
-            text: qsTr("Thời tiết")
-            checked: Config.dashboard.showWeather
-            onToggled: GlobalConfig.dashboard.showWeather = checked
+            text: qsTr("Thông báo")
+            checked: Config.dashboard.showNotifications
+            onToggled: GlobalConfig.dashboard.showNotifications = checked
         }
 
         // Performance widgets
