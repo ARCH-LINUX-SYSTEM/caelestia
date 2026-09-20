@@ -36,10 +36,10 @@ Item {
                 enabled: Config.dashboard.showPerformance
             },
             {
-                component: weatherComponent,
-                iconName: "cloud",
-                text: qsTr("Thời tiết"),
-                enabled: Config.dashboard.showWeather
+                component: notificationsComponent,
+                iconName: "notifications",
+                text: qsTr("Thông báo"),
+                enabled: Config.dashboard.showNotifications
             }
         ];
         return allTabs.filter(tab => tab.enabled);
@@ -176,9 +176,11 @@ Item {
             }
 
             Component {
-                id: weatherComponent
+                id: notificationsComponent
 
-                WeatherTab {}
+                NotificationsTab {
+                    screenState: root.screenState
+                }
             }
 
             Behavior on contentX {
