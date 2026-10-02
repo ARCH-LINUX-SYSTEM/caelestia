@@ -43,6 +43,15 @@ for path in sys.argv[1:]:
     if os.path.exists(out):
         print(path)
 `
+    readonly property string _setVideoScript: `
+video="$1"; state="$2"; cache="$3"; shift 3
+mkdir -p "$cache" "$state"
+frame="$cache/frame-$(printf '%s' "$video" | md5sum | cut -d' ' -f1).jpg"
+[ -f "$frame" ] || ffmpeg -y -loglevel error -ss 00:00:01 -i "$video" -vframes 1 "$frame"
+[ -f "$frame" ] && caelestia wallpaper -f "$frame" "$@"
+printf '%s' "$video" > "$state/path.txt"
+ln -sfn "$video" "$state/current"
+`
     property bool _refreshing: false
     property string actualCurrent
     readonly property var allWallpapers: staticWallpapers.entries.concat(animatedWallpapers.entries)
@@ -150,6 +159,9 @@ for path in sys.argv[1:]:
         if (isVideo(clean)) {
             previewColourLock = false;
             stopPreview();
+            // caelestia-cli only accepts images: derive colours from a frame, then point state at the video
+            Quickshell.execDetached(["bash", "-c", root._setVideoScript, "_", clean, `${Paths.state}/wallpaper`, `${Paths.cache}/videothumbs`, ...smartArg]);
+            return;
         }
         Quickshell.execDetached(["caelestia", "wallpaper", "-f", clean, ...smartArg]);
     }
