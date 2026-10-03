@@ -242,3 +242,15 @@ implementing the task.
   toggling, and app launching/focusing. Recommend testing with
   `qs -p /home/haidangphan/caelestia` (or via whatever worktree test flow
   this project's orchestration normally uses) before merging.
+
+- Added the **Space Switcher** (`modules/spaceswitcher/SpaceSwitcher.qml`, instantiated in `shell.qml`): a
+  top-centre overlay "island" with a workspace row and an app row for the selected workspace. It is separate from
+  the existing centre-screen Alt+Tab `WindowSwitcher`, which is untouched. No config/schema changes; it reuses
+  `Hypr`, `Screens`, `Colours`, `Tokens` and `Anim`.
+  - Global shortcuts (appid `caelestia`): `spaceSwitcher`, `spaceSwitcherPrev`. IPC: `qs ipc call spaceSwitcher
+    next|previous|commit|cancel`.
+  - **Required Hyprland binds** (user config, e.g. `~/.config/hypr/variable.lua`):
+    `SUPER + TAB -> hl.dsp.global("caelestia:spaceSwitcher")` and
+    `SUPER + SHIFT + TAB -> hl.dsp.global("caelestia:spaceSwitcherPrev")`.
+  - Keys while open: Tab/Left/Right cycle the focused row, Up/Down switch rows, 1-9 pick a workspace, Enter/Space
+    or releasing SUPER confirms, Esc cancels.

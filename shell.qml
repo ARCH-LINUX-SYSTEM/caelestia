@@ -11,6 +11,7 @@ import "modules/background"
 import "modules/areapicker"
 import "modules/dock"
 import "modules/lock"
+import "modules/spaceswitcher"
 import "modules/windowswitcher"
 import QtQuick
 import Quickshell
@@ -40,6 +41,7 @@ ShellRoot {
     Drawers {}
     AreaPicker {}
     Dock {}
+    SpaceSwitcher {}
     WindowSwitcher {}
     Lock {
         id: lock
