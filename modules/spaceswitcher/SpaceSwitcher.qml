@@ -323,7 +323,8 @@ Scope {
                     color: Colours.tPalette.m3surfaceContainer
                     height: content.implicitHeight + Tokens.padding.large * 2
                     opacity: root.presented ? 1 : 0
-                    radius: Tokens.rounding.large
+                    radius: Tokens.rounding.extraLarge
+                    scale: root.presented ? 1 : 0.92
                     transform: Translate {
                         y: root.presented ? 0 : -island.height * 0.4
 
@@ -333,7 +334,8 @@ Scope {
                             }
                         }
                     }
-                    width: Math.min(win.implicitWidth, Math.max(320, content.implicitWidth + Tokens.padding.large * 2))
+                    transformOrigin: Item.Top
+                    width: Math.min(win.implicitWidth, Math.max(360, content.implicitWidth + Tokens.padding.extraLarge * 2))
                     y: Tokens.padding.medium
 
                     Behavior on height {
@@ -344,6 +346,11 @@ Scope {
                     Behavior on opacity {
                         Anim {
                             type: Anim.FastEffects
+                        }
+                    }
+                    Behavior on scale {
+                        Anim {
+                            type: Anim.FastSpatial
                         }
                     }
                     Behavior on width {
@@ -361,7 +368,24 @@ Scope {
                         anchors.top: parent.top
                         spacing: Tokens.spacing.medium
 
-                        // Workspaces
+                        // Header: current selection
+                        Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: Tokens.spacing.small
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Colours.palette.m3primary
+                                text: root.appsFocused ? "apps" : "grid_view"
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                font: Tokens.font.title.small
+                                text: root.apps.length > 0 ? qsTr("Không gian %1 • %2 ứng dụng").arg(root.selectedSpace?.id ?? "").arg(root.apps.length) : qsTr("Không gian %1 • trống").arg(root.selectedSpace?.id ?? "")
+                            }
+                        }
+
+                        // Workspaces: the selected pill grows to show its number and label
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
                             spacing: Tokens.spacing.small
@@ -375,41 +399,39 @@ Scope {
                                     required property int index
                                     required property var modelData
                                     readonly property bool selected: index === root.spaceIndex
+                                    readonly property bool active: selected && !root.appsFocused
 
-                                    color: selected ? (root.appsFocused ? Colours.palette.m3secondaryContainer : Colours.palette.m3primary) : Colours.tPalette.m3surfaceContainerHigh
-                                    implicitHeight: 40
-                                    implicitWidth: 52
+                                    color: active ? Colours.palette.m3primary : selected ? Colours.palette.m3secondaryContainer : Colours.tPalette.m3surfaceContainerHigh
+                                    implicitHeight: 38
+                                    implicitWidth: selected ? 64 : 38
                                     radius: Tokens.rounding.full
 
                                     Behavior on color {
                                         CAnim {}
                                     }
+                                    Behavior on implicitWidth {
+                                        Anim {
+                                            type: Anim.FastSpatial
+                                        }
+                                    }
 
-                                    Column {
+                                    StyledText {
                                         anchors.centerIn: parent
-
-                                        StyledText {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            color: space.selected && !root.appsFocused ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
-                                            font: Tokens.font.label.large
-                                            text: space.modelData.id
-                                        }
-                                        Row {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            spacing: 2
-                                            visible: space.modelData.count > 0
-
-                                            Repeater {
-                                                model: Math.min(space.modelData.count, 4)
-
-                                                Rectangle {
-                                                    color: space.selected && !root.appsFocused ? Colours.palette.m3onPrimary : Colours.palette.m3primary
-                                                    height: 4
-                                                    radius: 2
-                                                    width: 4
-                                                }
-                                            }
-                                        }
+                                        color: space.active ? Colours.palette.m3onPrimary : space.selected ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+                                        font: Tokens.font.label.large
+                                        opacity: space.modelData.count > 0 || space.selected ? 1 : 0.45
+                                        text: space.modelData.id
+                                    }
+                                    // Occupied indicator
+                                    Rectangle {
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: 4
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        color: space.active ? Colours.palette.m3onPrimary : Colours.palette.m3primary
+                                        height: 4
+                                        radius: 2
+                                        visible: space.modelData.count > 0
+                                        width: 4
                                     }
                                     TapHandler {
                                         onTapped: {
@@ -422,6 +444,13 @@ Scope {
                             }
                         }
 
+                        Rectangle {
+                            color: Colours.palette.m3outlineVariant
+                            height: 1
+                            opacity: 0.6
+                            width: parent.width
+                        }
+
                         // Apps in the selected workspace
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -431,57 +460,91 @@ Scope {
                             Repeater {
                                 model: root.apps
 
-                                delegate: StyledRect {
+                                delegate: Item {
                                     id: app
 
                                     required property int index
                                     required property var modelData
                                     readonly property bool selected: index === root.appIndex && root.appsFocused
 
-                                    border.color: Colours.palette.m3primary
-                                    border.width: selected ? 2 : 0
-                                    color: selected ? Colours.tPalette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
-                                    implicitHeight: 76
-                                    implicitWidth: 92
-                                    radius: Tokens.rounding.medium
+                                    implicitHeight: 96
+                                    implicitWidth: 96
 
-                                    Behavior on color {
-                                        CAnim {}
-                                    }
+                                    StyledRect {
+                                        anchors.fill: parent
+                                        border.color: Colours.palette.m3primary
+                                        border.width: app.selected ? 2 : 0
+                                        color: app.selected ? Colours.tPalette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
+                                        opacity: app.selected ? 1 : 0.8
+                                        radius: Tokens.rounding.large
+                                        scale: app.selected ? 1 : 0.94
 
-                                    IconImage {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        anchors.top: parent.top
-                                        anchors.topMargin: Tokens.padding.small
-                                        implicitSize: 40
-                                        source: Icons.getAppIcon(app.modelData?.lastIpcObject?.class ?? "", "image-missing")
-                                    }
-                                    StyledText {
-                                        anchors.bottom: parent.bottom
-                                        anchors.bottomMargin: Tokens.padding.small
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        elide: Text.ElideRight
-                                        font: Tokens.font.label.small
-                                        horizontalAlignment: Text.AlignHCenter
-                                        text: app.modelData?.title ?? ""
-                                        width: parent.width - Tokens.padding.small * 2
-                                    }
-                                    TapHandler {
-                                        onTapped: {
-                                            root.appIndex = app.index;
-                                            root.appsFocused = true;
-                                            root.commit();
+                                        Behavior on opacity {
+                                            Anim {
+                                                type: Anim.FastEffects
+                                            }
+                                        }
+                                        Behavior on scale {
+                                            Anim {
+                                                type: Anim.FastSpatial
+                                            }
+                                        }
+
+                                        IconImage {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.top: parent.top
+                                            anchors.topMargin: Tokens.padding.medium
+                                            implicitSize: 46
+                                            source: Icons.getAppIcon(app.modelData?.lastIpcObject?.class ?? "", "image-missing")
+                                        }
+                                        StyledText {
+                                            anchors.bottom: parent.bottom
+                                            anchors.bottomMargin: Tokens.padding.small
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            color: app.selected ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
+                                            elide: Text.ElideRight
+                                            font: Tokens.font.label.small
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: app.modelData?.title ?? ""
+                                            width: parent.width - Tokens.padding.medium * 2
+                                        }
+                                        TapHandler {
+                                            onTapped: {
+                                                root.appIndex = app.index;
+                                                root.appsFocused = true;
+                                                root.commit();
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
+                        // Empty workspace
+                        Column {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: Tokens.spacing.extraSmall
+                            visible: root.apps.length === 0
+
+                            MaterialIcon {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: Colours.palette.m3outline
+                                fontStyle: Tokens.font.icon.extraLarge
+                                text: "desktop_windows"
+                            }
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: Colours.palette.m3outline
+                                font: Tokens.font.label.medium
+                                text: qsTr("Không gian trống")
+                            }
+                        }
+
                         StyledText {
-                            color: Colours.palette.m3onSurfaceVariant
+                            color: Colours.palette.m3outline
                             font: Tokens.font.label.small
                             horizontalAlignment: Text.AlignHCenter
-                            text: root.apps.length === 0 ? qsTr("Không gian trống • ←/→ đổi không gian • Enter để mở") : qsTr("SUPER+Tab: không gian • SUPER+Shift+Tab: ứng dụng • ←/→ chọn • Thả SUPER để mở")
+                            text: qsTr("SUPER+Tab: không gian  •  SUPER+Shift+Tab: ứng dụng  •  Thả SUPER để mở")
                             width: parent.width
                         }
                     }
