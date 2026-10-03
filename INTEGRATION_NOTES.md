@@ -247,10 +247,12 @@ implementing the task.
   top-centre overlay "island" with a workspace row and an app row for the selected workspace. It is separate from
   the existing centre-screen Alt+Tab `WindowSwitcher`, which is untouched. No config/schema changes; it reuses
   `Hypr`, `Screens`, `Colours`, `Tokens` and `Anim`.
-  - Global shortcuts (appid `caelestia`): `spaceSwitcher`, `spaceSwitcherPrev`. IPC: `qs ipc call spaceSwitcher
-    next|previous|commit|cancel`.
+  - Global shortcuts (appid `caelestia`): `spaceSwitcher` (cycle workspaces) and `appSwitcher` (cycle apps of the
+    current workspace). IPC: `qs ipc call spaceSwitcher nextWorkspace|nextApp|commit|cancel`.
   - **Required Hyprland binds** (user config, e.g. `~/.config/hypr/variable.lua`):
     `SUPER + TAB -> hl.dsp.global("caelestia:spaceSwitcher")` and
-    `SUPER + SHIFT + TAB -> hl.dsp.global("caelestia:spaceSwitcherPrev")`.
-  - Keys while open: Tab/Left/Right cycle the focused row, Up/Down switch rows, 1-9 pick a workspace, Enter/Space
-    or releasing SUPER confirms, Esc cancels.
+    `SUPER + SHIFT + TAB -> hl.dsp.global("caelestia:appSwitcher")`.
+  - Keys while open: repeat the shortcut (or Tab/Left/Right) to cycle, Up/Down switch rows, 1-9 pick a workspace,
+    Enter/Space or releasing SUPER confirms, Esc cancels.
+- `Icons.getAppIcon` (`utils/Icons.qml`) now falls back to the lower-cased window class when no desktop entry
+  matches, so e.g. `kitty` resolves via the icon theme instead of showing the missing-icon fallback.

@@ -100,7 +100,8 @@ Singleton {
     }
 
     function getAppIcon(name: string, fallback: string): string {
-        const icon = DesktopEntries.heuristicLookup(name)?.icon;
+        // Fall back to the window class itself (e.g. "kitty") when no desktop entry matches.
+        const icon = DesktopEntries.heuristicLookup(name)?.icon || name.toLowerCase();
         if (fallback !== "undefined")
             return Quickshell.iconPath(icon, fallback);
         return Quickshell.iconPath(icon);

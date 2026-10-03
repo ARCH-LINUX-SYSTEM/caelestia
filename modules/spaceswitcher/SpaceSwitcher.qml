@@ -98,9 +98,12 @@ Scope {
         return screen?.name ?? Screens.screens[0]?.name ?? "";
     }
 
-    function start(direction: int): void {
+    // mode "workspace": SUPER+TAB cycles workspaces. mode "app": SUPER+SHIFT+TAB cycles apps.
+    function start(mode: string): void {
+        const appMode = mode === "app";
         if (switching) {
-            step(direction);
+            appsFocused = appMode && apps.length > 0;
+            step(1);
             return;
         }
 
@@ -116,9 +119,12 @@ Scope {
         overlayVisible = true;
         spaceIndex = Math.max(0, list.findIndex(s => s.id === current));
         apps = appsFor(list[spaceIndex].id);
-        appsFocused = apps.length > 0;
-        // Start on the previously focused app, like Alt+Tab.
-        appIndex = apps.length === 0 ? -1 : (apps.length > 1 ? (direction >= 0 ? 1 : apps.length - 1) : 0);
+        appsFocused = appMode && apps.length > 0;
+        // Start on the next workspace / previously focused app, like Alt+Tab.
+        appIndex = apps.length === 0 ? -1 : (apps.length > 1 && appMode ? 1 : 0);
+        if (!appMode)
+            spaceIndex = (spaceIndex + 1) % list.length;
+        apps = appsFor(list[spaceIndex].id);
         Qt.callLater(() => {
             if (root.switching)
                 root.presented = true;
@@ -210,20 +216,20 @@ Scope {
 
     // qmllint disable unresolved-type
     CustomShortcut {
-        description: qsTr("Mở bộ chuyển không gian và ứng dụng")
+        description: qsTr("Chuyển không gian làm việc")
         // qmllint enable unresolved-type
         name: "spaceSwitcher"
 
-        onPressed: root.start(1)
+        onPressed: root.start("workspace")
     }
 
     // qmllint disable unresolved-type
     CustomShortcut {
-        description: qsTr("Mở bộ chuyển không gian và ứng dụng (ngược)")
+        description: qsTr("Chuyển ứng dụng")
         // qmllint enable unresolved-type
-        name: "spaceSwitcherPrev"
+        name: "appSwitcher"
 
-        onPressed: root.start(-1)
+        onPressed: root.start("app")
     }
 
     IpcHandler {
@@ -233,11 +239,11 @@ Scope {
         function commit(): void {
             root.commit();
         }
-        function next(): void {
-            root.start(1);
+        function nextApp(): void {
+            root.start("app");
         }
-        function previous(): void {
-            root.start(-1);
+        function nextWorkspace(): void {
+            root.start("workspace");
         }
 
         target: "spaceSwitcher"
@@ -278,7 +284,7 @@ Scope {
                 focus: root.switching && win.visible
 
                 Keys.onPressed: event => {
-                    const back = (event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab;
+                    const back = !root.appsFocused && ((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab);
                     if (event.key === Qt.Key_Escape) {
                         root.cancel();
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
@@ -475,7 +481,7 @@ Scope {
                             color: Colours.palette.m3onSurfaceVariant
                             font: Tokens.font.label.small
                             horizontalAlignment: Text.AlignHCenter
-                            text: root.apps.length === 0 ? qsTr("Không gian trống • ←/→ đổi không gian • Enter để mở") : qsTr("Tab/←/→ chọn • ↑/↓ đổi hàng • 1-9 chọn không gian • Thả SUPER để mở")
+                            text: root.apps.length === 0 ? qsTr("Không gian trống • ←/→ đổi không gian • Enter để mở") : qsTr("SUPER+Tab: không gian • SUPER+Shift+Tab: ứng dụng • ←/→ chọn • Thả SUPER để mở")
                             width: parent.width
                         }
                     }
