@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""Watch running Claude Code sessions and their subagents.
+
+Emits one JSON line on stdout whenever the merged snapshot changes (and once
+at start):
+
+    {"version": 1, "sessions": [ ... ]}
+
+Sources, merged per sessionId (hook state wins over fallback):
+  * hook state files: ${XDG_RUNTIME_DIR:-/tmp}/caelestia/claude-agents/<sid>.json
+  * fallback:         ${CLAUDE_CONFIG_DIR:-~/.claude}/sessions/<pid>.json plus
+                      projects/*/<sid>/subagents/agent-*.jsonl (+ .meta.json)
+
+Stdlib only, polls once per second, never parses transcripts beyond a bounded
+read of a subagent's small .meta.json (or the first line of its .jsonl).
+"""
+
+import glob
+import json
+import os
+import signal
+import sys
+import time
+
+VERSION = 1
+POLL_INTERVAL = 1.0
+SUBAGENT_RUNNING_WINDOW = 30.0  # fallback: jsonl touched within this => running
+SUBAGENT_STALE = 600.0  # running with no update for this long => done
+STEP_LIMIT = 15
+FALLBACK_DONE_KEEP = 600.0  # fallback: keep finished subagents this long
+FALLBACK_MAX_SUBAGENTS = 20
+HOOK_ORPHAN_MAX_AGE = 86400.0  # hook files without a usable pid
+META_READ_LIMIT = 8192
+FIRST_LINE_LIMIT = 16384
+DESCRIPTION_MAX = 200
+
+STATUS_ORDER = {"waiting": 0, "busy": 1, "idle": 2}
+
+
+def runtime_dir():
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "caelestia", "claude-agents")
+
+
+def claude_dir():
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+
+
+def read_json(path, limit=1 << 20):
+    try:
+        with open(path, "rb") as f:
+            data = f.read(limit + 1)
+        if len(data) > limit:
+            return None
+        obj = json.loads(data)
+        return obj if isinstance(obj, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def proc_start_time(pid):
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            stat = f.read().decode(errors="replace")
+        # comm may contain spaces/parens; fields after the last ')' are fixed
+        rest = stat.rsplit(")", 1)[1].split()
+        return rest[19]  # field 22 (starttime)
+    except (OSError, IndexError):
+        return None
+
+
+def pid_alive(pid, proc_start=None):
+    if not isinstance(pid, int) or pid <= 1:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    except OSError:
+        return False
+    if proc_start:
+        start = proc_start_time(pid)
+        if start is not None and str(start) != str(proc_start):
+            return False  # pid was reused
+    return True
+
+
+def to_ms(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def clean_steps(raw):
+    """Recent tool calls recorded by the hook; at most STEP_LIMIT, oldest first."""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for st in raw[-STEP_LIMIT:]:
+        if not isinstance(st, dict) or not isinstance(st.get("tool"), str):
+            continue
+        summary = st.get("summary")
+        out.append({
+            "id": str(st.get("id") or ""),
+            "tool": st["tool"],
+            "summary": summary if isinstance(summary, str) else None,
+            "status": st.get("status") if st.get("status") in ("running", "done", "error") else "done",
+            "at": to_ms(st.get("at")),
+            "endedAt": to_ms(st.get("endedAt")),
+        })
+    return out
+
+
+def clip(text):
+    if not isinstance(text, str):
+        return None
+    text = " ".join(text.split())
+    if not text:
+        return None
+    return text if len(text) <= DESCRIPTION_MAX else text[: DESCRIPTION_MAX - 1] + "…"
+
+
+class Watcher:
+    def __init__(self):
+        self.hook_dir = runtime_dir()
+        self.claude_dir = claude_dir()
+        self.sessions_dir = os.path.join(self.claude_dir, "sessions")
+        self.projects_dir = os.path.join(self.claude_dir, "projects")
+        self.subagent_dirs = {}  # sessionId -> subagents dir (or None)
+        self.meta_cache = {}  # jsonl path -> (type, description)
+
+    # ---------- hook state ----------
+
+    def load_hook_sessions(self):
+        result = {}
+        try:
+            names = os.listdir(self.hook_dir)
+        except OSError:
+            return result
+        now = time.time()
+        for name in names:
+            if not name.endswith(".json") or name.startswith("."):
+                continue
+            path = os.path.join(self.hook_dir, name)
+            data = read_json(path)
+            if data is None:
+                continue
+            sid = data.get("sessionId") or name[:-5]
+            pid = data.get("pid")
+            if not isinstance(pid, int) or pid <= 1:
+                try:
+                    if now - os.stat(path).st_mtime > HOOK_ORPHAN_MAX_AGE:
+                        self.remove_hook_file(sid, path)
+                except OSError:
+                    pass
+                continue
+            if not pid_alive(pid):
+                self.remove_hook_file(sid, path)
+                continue
+            if data.get("status") == "ended":
+                continue
+            data["sessionId"] = sid
+            result[sid] = data
+        return result
+
+    def remove_hook_file(self, sid, path):
+        for p in (path, os.path.join(self.hook_dir, f"{sid}.lock")):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    # ---------- fallback ----------
+
+    def load_fallback_sessions(self):
+        result = {}
+        for path in glob.glob(os.path.join(self.sessions_dir, "*.json")):
+            data = read_json(path, 65536)
+            if data is None:
+                continue
+            sid = data.get("sessionId")
+            pid = data.get("pid")
+            if not isinstance(sid, str) or not sid:
+                continue
+            if not pid_alive(pid, data.get("procStart")):
+                continue
+            prev = result.get(sid)
+            if prev and (to_ms(prev.get("updatedAt")) or 0) >= (to_ms(data.get("updatedAt")) or 0):
+                continue
+            result[sid] = data
+        return result
+
+    def find_subagent_dir(self, sid):
+        cached = self.subagent_dirs.get(sid)
+        if cached and os.path.isdir(cached):
+            return cached
+        matches = glob.glob(os.path.join(glob.escape(self.projects_dir), "*", glob.escape(sid), "subagents"))
+        found = matches[0] if matches else None
+        if found:
+            self.subagent_dirs[sid] = found
+        return found
+
+    def subagent_info(self, jsonl_path):
+        cached = self.meta_cache.get(jsonl_path)
+        if cached is not None:
+            return cached
+        agent_type, description, started = None, None, None
+        meta_path = jsonl_path[: -len(".jsonl")] + ".meta.json"
+        meta = read_json(meta_path, META_READ_LIMIT)
+        if meta:
+            try:
+                started = int(os.stat(meta_path).st_mtime * 1000)  # written once at spawn
+            except OSError:
+                pass
+            agent_type = meta.get("agentType")
+            description = meta.get("description")
+        if description is None:
+            try:
+                with open(jsonl_path, "rb") as f:
+                    line = f.readline(FIRST_LINE_LIMIT)
+                first = json.loads(line) if line.endswith(b"\n") else None
+                content = (first or {}).get("message", {}).get("content")
+                if isinstance(content, list):
+                    content = next((c.get("text") for c in content if isinstance(c, dict) and c.get("type") == "text"), None)
+                description = content
+            except (OSError, ValueError, AttributeError):
+                pass
+        info = (agent_type if isinstance(agent_type, str) else None, clip(description), started)
+        # only cache once we have something; meta may appear slightly later
+        if meta or description:
+            self.meta_cache[jsonl_path] = info
+        return info
+
+    def scan_subagents(self, sid, now):
+        """Returns {id: subagent} for this session from transcript files, plus mtimes."""
+        d = self.find_subagent_dir(sid)
+        found = {}
+        if not d:
+            return found
+        try:
+            entries = os.scandir(d)
+        except OSError:
+            return found
+        with entries:
+            for e in entries:
+                name = e.name
+                if not (name.startswith("agent-") and name.endswith(".jsonl")):
+                    continue
+                try:
+                    st = e.stat()
+                except OSError:
+                    continue
+                age = now - st.st_mtime
+                running = age < SUBAGENT_RUNNING_WINDOW
+                if not running and age > FALLBACK_DONE_KEEP:
+                    found[name[6:-6]] = {"_mtime": st.st_mtime, "_old": True}
+                    continue
+                agent_type, description, started = self.subagent_info(e.path)
+                found[name[6:-6]] = {
+                    "id": name[6:-6],
+                    "type": agent_type,
+                    "description": description,
+                    "status": "running" if running else "done",
+                    "startedAt": started,
+                    "endedAt": None if running else int(st.st_mtime * 1000),
+                    "_mtime": st.st_mtime,
+                }
+        return found
+
+    # ---------- merge ----------
+
+    def snapshot(self):
+        now = time.time()
+        now_ms = int(now * 1000)
+        hooks = self.load_hook_sessions()
+        fallbacks = self.load_fallback_sessions()
+        sessions = []
+
+        for sid in set(hooks) | set(fallbacks):
+            hook = hooks.get(sid)
+            fb = fallbacks.get(sid) or {}
+            scanned = self.scan_subagents(sid, now)
+
+            if hook:
+                s = {
+                    "version": VERSION,
+                    "sessionId": sid,
+                    "pid": hook.get("pid"),
+                    "cwd": hook.get("cwd") or fb.get("cwd"),
+                    "name": hook.get("name") or fb.get("name"),
+                    "status": hook.get("status") or fb.get("status") or "idle",
+                    "currentTool": hook.get("currentTool"),
+                    "lastMessage": hook.get("lastMessage"),
+                    "startedAt": to_ms(hook.get("startedAt")) or to_ms(fb.get("startedAt")),
+                    "updatedAt": to_ms(hook.get("updatedAt")) or to_ms(fb.get("updatedAt")),
+                    "source": "hook",
+                    "alive": True,
+                    "steps": clean_steps(hook.get("steps")),
+                }
+                subs = []
+                seen = set()
+                pending_spawn = False  # "tool:<id>" placeholder awaiting SubagentStart rename
+                for raw in hook.get("subagents") or []:
+                    if not isinstance(raw, dict) or not raw.get("id"):
+                        continue
+                    sub_id = str(raw["id"])
+                    bare = sub_id[6:] if sub_id.startswith("agent-") else sub_id
+                    seen.update((sub_id, bare))
+                    scan = scanned.get(bare) or {}
+                    sub = {
+                        "id": sub_id,
+                        "type": raw.get("type") or scan.get("type"),
+                        "description": raw.get("description") or scan.get("description"),
+                        "status": "done" if raw.get("status") == "done" else "running",
+                        "startedAt": to_ms(raw.get("startedAt")),
+                        "endedAt": to_ms(raw.get("endedAt")),
+                        "currentTool": raw.get("currentTool") if isinstance(raw.get("currentTool"), str) else None,
+                        "steps": clean_steps(raw.get("steps")),
+                    }
+                    if sub_id.startswith("tool:"):
+                        pending_spawn = True
+                    if sub["status"] == "running":
+                        last = max((sub["startedAt"] or 0) / 1000, scan.get("_mtime") or 0)
+                        if last and now - last > SUBAGENT_STALE:
+                            sub["status"] = "done"
+                            sub["endedAt"] = int(last * 1000)
+                    subs.append(sub)
+                # subagents the hook missed (e.g. hook installed mid-session); skipped while a
+                # placeholder is pending so the about-to-be-renamed agent isn't listed twice
+                for sub_id, scan in scanned.items():
+                    if pending_spawn:
+                        break
+                    if sub_id not in seen and not scan.get("_old") and scan["status"] == "running":
+                        extra = {k: v for k, v in scan.items() if not k.startswith("_")}
+                        extra["currentTool"] = None
+                        extra["steps"] = []
+                        subs.append(extra)
+            else:
+                s = {
+                    "version": VERSION,
+                    "sessionId": sid,
+                    "pid": fb.get("pid"),
+                    "cwd": fb.get("cwd"),
+                    "name": fb.get("name"),
+                    "status": fb.get("status") if fb.get("status") in STATUS_ORDER else "idle",
+                    "currentTool": None,
+                    "lastMessage": None,
+                    "startedAt": to_ms(fb.get("startedAt")),
+                    "updatedAt": to_ms(fb.get("updatedAt")),
+                    "source": "fallback",
+                    "alive": True,
+                    "steps": [],
+                }
+                subs = [
+                    dict({k: v for k, v in scan.items() if not k.startswith("_")}, currentTool=None, steps=[])
+                    for scan in scanned.values()
+                    if not scan.get("_old")
+                ]
+                subs.sort(key=lambda x: (x["status"] != "running", -(x["endedAt"] or now_ms)))
+                subs = subs[:FALLBACK_MAX_SUBAGENTS]
+
+            if s["status"] not in STATUS_ORDER:
+                s["status"] = "idle"
+            subs.sort(key=lambda x: (x.get("startedAt") or 0, x["id"]))
+            s["subagents"] = subs
+            sessions.append(s)
+
+        sessions.sort(key=lambda x: (STATUS_ORDER.get(x["status"], 3), -(x["updatedAt"] or 0), x["sessionId"]))
+        return {"version": VERSION, "sessions": sessions}
+
+
+def main():
+    def on_term(signum, frame):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, on_term)
+
+    once = "--once" in sys.argv[1:]
+    watcher = Watcher()
+    last = None
+    try:
+        while True:
+            try:
+                line = json.dumps(watcher.snapshot(), ensure_ascii=False, separators=(",", ":"))
+            except Exception as err:  # never die on a transient fs race
+                print(f"claude-agents-watch: {err!r}", file=sys.stderr, flush=True)
+                line = None
+            if line is not None and line != last:
+                sys.stdout.write(line + "\n")
+                sys.stdout.flush()
+                last = line
+            if once:
+                break
+            time.sleep(POLL_INTERVAL)
+    except BrokenPipeError:
+        # reader went away: silence the interpreter's final flush and exit cleanly
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
+    except (KeyboardInterrupt, SystemExit):
+        pass
+
+
+if __name__ == "__main__":
+    main()

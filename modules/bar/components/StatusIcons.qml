@@ -9,6 +9,7 @@ import Caelestia.Config
 import qs.components
 import qs.services
 import qs.utils
+import qs.modules.bar.components as BarComponents
 
 StyledRect {
     id: root
@@ -32,6 +33,17 @@ StyledRect {
         anchors.bottomMargin: Tokens.padding.medium
 
         spacing: Tokens.spacing.medium / 2
+
+        // Claude Code sessions (only shown while at least one session is running)
+        WrappedLoader {
+            name: "claudeagents"
+            active: ClaudeAgents.activeCount > 0
+
+            sourceComponent: BarComponents.ClaudeAgents {
+                objectName: "taskbarClaudeAgents"
+                colour: root.colour
+            }
+        }
 
         // Lock keys status
         WrappedLoader {

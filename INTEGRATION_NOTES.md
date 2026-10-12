@@ -256,3 +256,35 @@ implementing the task.
     Enter/Space or releasing SUPER confirms, Esc cancels.
 - `Icons.getAppIcon` (`utils/Icons.qml`) now falls back to the lower-cased window class when no desktop entry
   matches, so e.g. `kitty` resolves via the icon theme instead of showing the missing-icon fallback.
+
+- Claude Code sessions tracker UI (consumes `services/ClaudeAgents.qml`):
+  - Bar indicator `modules/bar/components/ClaudeAgents.qml` is mounted inside the existing
+    `statusIcons` bar entry (`StatusIcons.qml`, first `WrappedLoader`, popout name `claudeagents`,
+    objectName `taskbarClaudeAgents`), gated on `ClaudeAgents.activeCount > 0`. No new bar entry id,
+    so no C++/schema/config change; hover popout follows `bar.popouts.statusIcons` like the other
+    status icons. StatusIcons imports `qs.modules.bar.components as BarComponents` because the
+    unqualified name `ClaudeAgents` resolves to the `qs.services` singleton there.
+  - Popout `modules/bar/popouts/ClaudeAgents.qml`, registered in `popouts/Content.qml`.
+  - `modules/ClaudeAgentsMonitor.qml` (instantiated once in `shell.qml`): toasts via `Toaster`
+    (subagent finishes coalesced over 1.5s, Info; attention: Warning for permission prompts, short
+    Info for idle reminders, max one per session per 30s) and IPC
+    `qs -c caelestia ipc call claudeAgents toggle|open|close` (opens on the focused monitor).
+
+### Claude agents flow overlay
+
+- `modules/claudeflow/ClaudeFlow.qml` (instantiated in `shell.qml`): centred
+  overlay (layer `Overlay`, namespace `caelestia-claude-flow`, exclusive
+  keyboard focus while open) showing one Claude Code session as a flow — main
+  agent with a step timeline on the left, Canvas connectors to one card per
+  subagent on the right, each with its recent tool calls as a pipeline.
+  Esc / click outside closes, ←/→/Tab switch sessions.
+- Open/close state lives in the existing `ClaudeAgents` service
+  (`flowOpen`, `flowSessionId`, `openFlow(id)`, `closeFlow()`); no new service.
+  Clicking a session card in the bar popout now opens the overlay; focusing the
+  terminal moved to the overlay's "Mở terminal" button.
+- IPC: `qs -c caelestia ipc call claudeAgents flow <sessionId|"">` toggles it.
+- Data: the hook (`extras/claude/caelestia-agents-hook.py`) now records
+  `steps` (last 15 tool calls: `{id, tool, summary, status running|done|error,
+  at, endedAt}`, plus `Prompt` entries) on the session and on each subagent;
+  `scripts/claude-agents-watch` validates and passes them through (fallback
+  sessions have `steps: []`). Additive to contract v1.

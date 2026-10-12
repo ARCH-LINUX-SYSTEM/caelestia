@@ -158,7 +158,7 @@ StyledWindow {
         opacity: root.surfaceColour.a
         layer.enabled: true
         layer.effect: MultiEffect {
-            shadowEnabled: true
+            shadowEnabled: false
             blurMax: 15
             shadowColor: Qt.alpha(Colours.palette.m3shadow, Math.max(0, root.shadowOpacity))
         }

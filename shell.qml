@@ -13,6 +13,7 @@ import "modules/dock"
 import "modules/lock"
 import "modules/spaceswitcher"
 import "modules/windowswitcher"
+import "modules/claudeflow"
 import QtQuick
 import Quickshell
 import qs.services
@@ -52,6 +53,8 @@ ShellRoot {
     LocaleSettings {}
     Shortcuts {}
     BatteryMonitor {}
+    ClaudeAgentsMonitor {}
+    ClaudeFlow {}
     IdleMonitors {
         lock: lock
     }
